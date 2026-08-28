@@ -187,6 +187,15 @@
     font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;pointer-events:none;
   }
   .note{padding:14px 20px 4px;font-size:14.5px;white-space:pre-wrap;}
+  .wish-reason{padding:10px 20px 4px;font-size:14px;font-style:italic;color:var(--text-dim);}
+  .wish-reactions{display:flex;flex-wrap:wrap;gap:8px;padding:12px 20px 4px;}
+  .reaction-btn{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:999px;
+    padding:5px 12px;font-size:14px;cursor:pointer;color:var(--text);font-family:inherit;
+  }
+  .reaction-btn span{font-family:"IBM Plex Mono",monospace;font-size:12px;margin-left:2px;}
+  .reaction-btn.reacted{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+  .wish-card .comments-section{margin-top:6px;}
   .card-foot{display:flex;justify-content:space-between;align-items:center;padding:10px 20px 16px;font-size:12px;color:var(--text-dim);}
   .card-foot .del{background:none;border:none;color:var(--text-dim);font-size:12px;text-decoration:underline;padding:2px;}
   .card-foot .del:hover{color:var(--accent);}
@@ -199,20 +208,23 @@
   .comment-del{background:none;border:none;color:var(--text-dim);font-size:11.5px;text-decoration:underline;padding:0;flex:none;}
   .comment-del:hover{color:var(--accent);}
   .comment-text{font-size:13.5px;color:var(--text);white-space:pre-wrap;word-break:break-word;}
-  .comment-form{display:flex;gap:8px;}
+  /* 입력칸은 항상 한 줄 전체를 쓰고, 그 아래에 "이미지 첨부"/"등록" 버튼을 나란히
+     같은 크기로 둠 — 좁은 모바일 화면에서 등록 버튼이 잘려 보이던 문제를 해결함. */
+  .comment-form{display:flex;flex-wrap:wrap;gap:8px;}
   .comment-input{
-    flex:1;background:var(--surface);border:1px solid var(--border);border-radius:9px;
+    flex:1 1 100%;background:var(--surface);border:1px solid var(--border);border-radius:9px;
     padding:9px 12px;font-size:13px;color:var(--text);font-family:inherit;
   }
   .comment-submit{
     background:var(--accent);color:var(--accent-ink);border:none;border-radius:9px;
-    padding:9px 16px;font-size:13px;font-weight:700;flex:none;
+    padding:9px 16px;font-size:13px;font-weight:700;flex:1;
   }
   .comment-photo-label{
-    display:flex;align-items:center;gap:2px;cursor:pointer;font-size:17px;
-    padding:0 4px;color:var(--text-dim);flex:none;
+    display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-size:13px;
+    font-weight:700;padding:9px 16px;flex:1;color:var(--text);background:var(--surface-2);
+    border:1px solid var(--border);border-radius:9px;
   }
-  .comment-photo-label:hover{color:var(--accent);}
+  .comment-photo-label:hover{color:var(--accent);border-color:var(--accent);}
   .comment-photo-count{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--accent);}
   .comment-photos{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
   .comment-photos img{width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;display:block;}
@@ -339,6 +351,7 @@
   <button data-tab="map">지도</button>
   <button data-tab="board" class="active">게시판</button>
   <button data-tab="photos">포토 게시판</button>
+  <button data-tab="wishlist">마라리스트</button>
   <button data-tab="members">회원</button>
 </nav>
 
@@ -368,6 +381,16 @@
 
   <section class="tab" id="tab-photos">
     <div class="photo-grid" id="photoGrid"></div>
+  </section>
+
+  <section class="tab" id="tab-wishlist">
+    <div class="wrap board-wrap">
+      <div class="toolbar">
+        <div style="flex:1;font-size:13px;color:var(--text-dim);">언젠가 가보고 싶은 마라 맛집을 적어두는 위시리스트예요.</div>
+        <button type="button" class="btn-primary" id="openWishComposer">+ 맛집 추가</button>
+      </div>
+      <div class="feed" id="wishFeed"></div>
+    </div>
   </section>
 
   <section class="tab" id="tab-members">
@@ -454,6 +477,33 @@
       <button type="submit" class="btn-primary" id="submitComposer">기록 올리기</button>
     </div>
     <p class="hint">위치를 검색해 선택하거나 지도에서 직접 찍어야 저장할 수 있어요. 사진은 자동으로 압축돼요.</p>
+  </form>
+</dialog>
+
+<dialog id="wishComposer">
+  <form class="composer-inner" id="wishComposerForm">
+    <h3>가고 싶은 맛집</h3>
+
+    <div class="field">
+      <label>장소</label>
+      <div id="wishPlacePickedBox" style="display:none" class="place-picked">
+        <span id="wishPlacePickedText"></span>
+        <button type="button" class="clear" id="wishPlaceClear">다시 검색</button>
+      </div>
+      <div class="place-search-box">
+        <input type="text" id="wishPlaceSearchInput" placeholder="식당 이름이나 주소로 검색" autocomplete="off" />
+        <div class="place-results" id="wishPlaceResults" hidden></div>
+      </div>
+    </div>
+    <div class="field">
+      <label>왜 가고 싶어요?</label>
+      <input type="text" id="wish-reason" placeholder="한 줄로 적어주세요" maxlength="80" />
+    </div>
+    <div class="composer-actions">
+      <button type="button" class="btn-ghost" id="cancelWishComposer">취소</button>
+      <button type="submit" class="btn-primary" id="submitWishComposer">추가하기</button>
+    </div>
+    <p class="hint">위치를 검색해서 선택해야 추가할 수 있어요.</p>
   </form>
 </dialog>
 
@@ -665,7 +715,7 @@
     var bar = document.getElementById("meBar");
     var text = document.getElementById("meText");
     if(me){
-      text.textContent = me.name + (me.code ? " (#"+me.code+")" : "") + "님 안녕하세요";
+      text.textContent = me.name + "님 안녕하세요"; // 회원 코드는 회원 명단에서만 보여주고 인사말엔 노출하지 않음
       bar.style.display = "block";
     } else {
       bar.style.display = "none";
@@ -910,7 +960,7 @@
 
   // ---------------- tabs ----------------
   var tabButtons = document.querySelectorAll("nav.tabs button");
-  var tabSections = { map: document.getElementById("tab-map"), board: document.getElementById("tab-board"), photos: document.getElementById("tab-photos"), members: document.getElementById("tab-members") };
+  var tabSections = { map: document.getElementById("tab-map"), board: document.getElementById("tab-board"), photos: document.getElementById("tab-photos"), wishlist: document.getElementById("tab-wishlist"), members: document.getElementById("tab-members") };
   tabButtons.forEach(function(btn){
     btn.addEventListener("click", function(){
       tabButtons.forEach(function(b){ b.classList.remove("active"); });
@@ -1177,6 +1227,297 @@
     }).catch(function(){ return null; });
   }
 
+  // ---------------- 마라리스트(위시리스트) 장소 검색 ----------------
+  // 기록 작성 창의 장소 검색과 완전히 같은 방식(카카오 우선, 실패 시 Nominatim)이지만
+  // 위시리스트 다이얼로그는 별도 창이라 입력칸/결과창/선택값을 독립적으로 둠.
+  var wishPlaceInput = document.getElementById("wishPlaceSearchInput");
+  var wishPlaceResults = document.getElementById("wishPlaceResults");
+  var wishPlacePickedBox = document.getElementById("wishPlacePickedBox");
+  var wishPlacePickedText = document.getElementById("wishPlacePickedText");
+  var wishPlaceClear = document.getElementById("wishPlaceClear");
+  var selectedWishPlace = null;
+  var wishSearchTimer = null;
+  var wishSearchAbort = null;
+  var wishSearchSeq = 0;
+
+  function showWishPicked(place){
+    selectedWishPlace = place;
+    wishPlaceInput.style.display = "none";
+    wishPlaceResults.hidden = true;
+    wishPlacePickedBox.style.display = "flex";
+    wishPlacePickedText.textContent = place.name + (place.address ? " · " + place.address : "");
+  }
+  function clearWishPicked(){
+    selectedWishPlace = null;
+    wishPlaceInput.style.display = "";
+    wishPlaceInput.value = "";
+    wishPlacePickedBox.style.display = "none";
+  }
+  wishPlaceClear.addEventListener("click", clearWishPicked);
+
+  wishPlaceInput.addEventListener("input", function(){
+    var q = wishPlaceInput.value.trim();
+    if(wishSearchTimer) clearTimeout(wishSearchTimer);
+    if(q.length < 2){ wishPlaceResults.hidden = true; wishPlaceResults.innerHTML = ""; return; }
+    wishSearchTimer = setTimeout(function(){ runWishPlaceSearch(q); }, 550);
+  });
+
+  function showWishPlaceMsg(text){
+    wishPlaceResults.innerHTML = '<div style="padding:10px 12px;font-size:12.5px;color:var(--text-dim)">'+esc(text)+'</div>';
+    wishPlaceResults.hidden = false;
+  }
+  function renderWishPlaceResults(list){
+    if(!list.length){
+      showWishPlaceMsg("검색 결과가 없어요.");
+      return;
+    }
+    wishPlaceResults.innerHTML = list.map(function(item, i){
+      return '<button type="button" data-i="'+i+'">'+esc(item.name)+
+        (item.address ? '<span class="sub">'+esc(item.address)+'</span>' : "")+'</button>';
+    }).join("");
+    wishPlaceResults.hidden = false;
+    Array.prototype.forEach.call(wishPlaceResults.querySelectorAll("button"), function(btn, i){
+      btn.addEventListener("click", function(){ showWishPicked(list[i]); });
+    });
+  }
+  function runWishPlaceSearch(q){
+    var seq = ++wishSearchSeq;
+    showWishPlaceMsg("검색 중…");
+    if(kakaoReady){ searchWishWithKakao(q, seq); } else { searchWishWithNominatim(q, seq); }
+  }
+  function searchWishWithKakao(q, seq){
+    var places = new kakao.maps.services.Places();
+    places.keywordSearch(q, function(data, status){
+      if(seq !== wishSearchSeq) return;
+      if(status !== kakao.maps.services.Status.OK){ searchWishWithNominatim(q, seq); return; }
+      renderWishPlaceResults(data.map(function(item){
+        return {
+          name: item.place_name,
+          address: item.road_address_name || item.address_name || "",
+          lat: parseFloat(item.y),
+          lng: parseFloat(item.x)
+        };
+      }));
+    });
+  }
+  function searchWishWithNominatim(q, seq){
+    if(wishSearchAbort) wishSearchAbort.abort();
+    wishSearchAbort = new AbortController();
+    var url = "https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=ko&q=" + encodeURIComponent(q);
+    fetch(url, { signal: wishSearchAbort.signal, headers: { "Accept": "application/json" } })
+      .then(function(r){ if(!r.ok){ throw new Error("http_" + r.status); } return r.json(); })
+      .then(function(list){
+        if(seq !== wishSearchSeq) return;
+        renderWishPlaceResults(list.map(function(item){
+          return {
+            name: item.display_name.split(",")[0],
+            address: item.display_name,
+            lat: parseFloat(item.lat),
+            lng: parseFloat(item.lon)
+          };
+        }));
+      })
+      .catch(function(err){
+        if(err.name === "AbortError") return;
+        if(seq !== wishSearchSeq) return;
+        console.warn("wish place search failed", err);
+        showWishPlaceMsg("검색에 실패했어요 (네트워크 문제일 수 있어요).");
+      });
+  }
+
+  // ---------------- 마라리스트 데이터 ----------------
+  var WISHLIST_STORAGE_KEY = "malalog_wishlist_v1";
+  var wishlist = [];
+  var WISH_REACTIONS = ["🔥","😍","🤤","👍"];
+
+  function loadLocalWishlist(){
+    try{ var raw = localStorage.getItem(WISHLIST_STORAGE_KEY); return raw ? JSON.parse(raw) : []; }
+    catch(e){ return []; }
+  }
+  function saveLocalWishlist(list){
+    try{ localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(list)); }catch(e){}
+  }
+  function startWishlistSync(){
+    if(db){
+      db.collection("wishlist").onSnapshot(function(snapshot){
+        wishlist = snapshot.docs.map(function(d){ return d.data(); });
+        renderWishlist();
+      }, function(err){
+        console.warn("마라리스트 동기화 실패, 로컬로 대체합니다.", err);
+        wishlist = loadLocalWishlist();
+        renderWishlist();
+      });
+    } else {
+      wishlist = loadLocalWishlist();
+      renderWishlist();
+    }
+  }
+  function addWishItem(item){
+    if(db){
+      db.collection("wishlist").doc(item.id).set(item).catch(function(err){
+        console.warn("마라리스트 저장 실패", err);
+        alert(describeSaveError(err));
+      });
+    } else {
+      wishlist.push(item);
+      saveLocalWishlist(wishlist);
+      renderWishlist();
+    }
+  }
+  function deleteWishItem(id){
+    if(!confirm("이 위시리스트 항목을 삭제할까요?")) return;
+    if(db){
+      db.collection("wishlist").doc(id).delete().catch(function(err){
+        console.warn("삭제 실패", err);
+        alert("삭제에 실패했어요. 네트워크를 확인해주세요.");
+      });
+    } else {
+      wishlist = wishlist.filter(function(w){ return w.id !== id; });
+      saveLocalWishlist(wishlist);
+      renderWishlist();
+    }
+  }
+  function persistWishItem(id, patch){
+    if(db){
+      db.collection("wishlist").doc(id).update(patch).catch(function(err){
+        console.warn("마라리스트 업데이트 실패", err);
+      });
+    } else {
+      var item = wishlist.find(function(w){ return w.id === id; });
+      if(item){ Object.assign(item, patch); saveLocalWishlist(wishlist); renderWishlist(); }
+    }
+  }
+  function addWishComment(itemId, text){
+    if(!me) return;
+    var item = wishlist.find(function(w){ return w.id === itemId; });
+    if(!item) return;
+    var comment = {
+      id: "c_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),
+      authorId: me.id, author: me.name, text: text, createdAt: Date.now()
+    };
+    persistWishItem(itemId, { comments: (item.comments || []).concat([comment]) });
+  }
+  function deleteWishComment(itemId, commentId){
+    var item = wishlist.find(function(w){ return w.id === itemId; });
+    if(!item) return;
+    persistWishItem(itemId, { comments: (item.comments || []).filter(function(c){ return c.id !== commentId; }) });
+  }
+  function toggleWishReaction(itemId, emoji){
+    if(!me) return;
+    var item = wishlist.find(function(w){ return w.id === itemId; });
+    if(!item) return;
+    var reactions = Object.assign({}, item.reactions || {});
+    var list = (reactions[emoji] || []).slice();
+    var idx = list.indexOf(me.id);
+    if(idx === -1){ list.push(me.id); } else { list.splice(idx, 1); }
+    reactions[emoji] = list;
+    persistWishItem(itemId, { reactions: reactions });
+  }
+
+  function renderWishlist(){
+    var wrap = document.getElementById("wishFeed");
+    if(!wrap) return;
+    if(!wishlist.length){
+      wrap.innerHTML = '<div class="empty"><span class="glyph">麻辣</span>아직 등록된 위시리스트가 없어요.<br/>가고 싶은 마라 맛집을 추가해보세요.</div>';
+      return;
+    }
+    var sorted = wishlist.slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
+    wrap.innerHTML = sorted.map(function(w){
+      var reactionsHtml = WISH_REACTIONS.map(function(emoji){
+        var list = (w.reactions && w.reactions[emoji]) || [];
+        var reacted = me && list.indexOf(me.id) !== -1;
+        return '<button type="button" class="reaction-btn'+(reacted ? " reacted" : "")+'" data-react="'+emoji+'" data-wish-id="'+w.id+'">'+
+          emoji+(list.length ? ' <span>'+list.length+'</span>' : "")+
+        '</button>';
+      }).join("");
+      var commentList = w.comments || [];
+      var commentsHtml = commentList.map(function(c){
+        var canDelete = me && c.authorId && c.authorId === me.id;
+        return (
+          '<div class="comment-item">'+
+            '<div class="comment-meta"><b>'+esc(c.author||"익명")+'</b>'+
+              (canDelete ? '<button type="button" class="comment-del" data-del-wish-comment="'+c.id+'" data-wish-id="'+w.id+'">삭제</button>' : "")+
+            '</div>'+
+            '<div class="comment-text">'+esc(c.text)+'</div>'+
+          '</div>'
+        );
+      }).join("");
+      return (
+        '<article class="card wish-card" data-id="'+w.id+'">'+
+          '<div class="card-head"><h2>'+esc(w.name)+'</h2></div>'+
+          (w.address ? '<div class="address">'+esc(w.address)+'</div>' : "")+
+          (w.reason ? '<div class="wish-reason">"'+esc(w.reason)+'"</div>' : "")+
+          '<div class="card-foot"><span>'+(w.author?esc(w.author)+' 추천':"")+'</span>'+
+            '<button type="button" class="del" data-del-wish="'+w.id+'">삭제</button></div>'+
+          '<div class="wish-reactions">'+reactionsHtml+'</div>'+
+          '<div class="comments-section">'+
+            (commentList.length ? '<div class="comments-list">'+commentsHtml+'</div>' : "")+
+            '<form class="comment-form" data-wish-comment-form="'+w.id+'">'+
+              '<input type="text" class="comment-input" placeholder="댓글을 남겨보세요" maxlength="300" autocomplete="off" />'+
+              '<button type="submit" class="comment-submit">등록</button>'+
+            '</form>'+
+          '</div>'+
+        '</article>'
+      );
+    }).join("");
+  }
+
+  document.getElementById("openWishComposer").addEventListener("click", function(){
+    document.getElementById("wishComposerForm").reset();
+    clearWishPicked();
+    document.getElementById("wishComposer").showModal();
+  });
+  document.getElementById("cancelWishComposer").addEventListener("click", function(){
+    document.getElementById("wishComposer").close();
+  });
+  document.getElementById("wishComposerForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    if(!selectedWishPlace){
+      alert("가고 싶은 장소를 검색해서 선택해주세요.");
+      return;
+    }
+    var item = {
+      id: "w_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),
+      name: selectedWishPlace.name,
+      address: selectedWishPlace.address,
+      lat: selectedWishPlace.lat,
+      lng: selectedWishPlace.lng,
+      reason: document.getElementById("wish-reason").value.trim(),
+      author: me ? me.name : "",
+      authorId: me ? me.id : null,
+      comments: [],
+      reactions: {},
+      createdAt: Date.now()
+    };
+    document.getElementById("wishComposer").close();
+    addWishItem(item);
+  });
+
+  document.getElementById("wishFeed").addEventListener("click", function(e){
+    var delBtn = e.target.closest("[data-del-wish]");
+    if(delBtn){ deleteWishItem(delBtn.getAttribute("data-del-wish")); return; }
+    var delCommentBtn = e.target.closest("[data-del-wish-comment]");
+    if(delCommentBtn){
+      if(!confirm("댓글을 삭제할까요?")) return;
+      deleteWishComment(delCommentBtn.getAttribute("data-wish-id"), delCommentBtn.getAttribute("data-del-wish-comment"));
+      return;
+    }
+    var reactBtn = e.target.closest("[data-react]");
+    if(reactBtn){
+      toggleWishReaction(reactBtn.getAttribute("data-wish-id"), reactBtn.getAttribute("data-react"));
+    }
+  });
+  document.getElementById("wishFeed").addEventListener("submit", function(e){
+    var form = e.target.closest("[data-wish-comment-form]");
+    if(!form) return;
+    e.preventDefault();
+    var itemId = form.getAttribute("data-wish-comment-form");
+    var input = form.querySelector(".comment-input");
+    var text = input.value.trim();
+    if(!text) return;
+    addWishComment(itemId, text);
+  });
+
   // ---------------- render: stats / board / photos ----------------
   function renderStats(){
     var restaurants = {};
@@ -1265,7 +1606,7 @@
         (list.length ? '<div class="comments-list">'+itemsHtml+'</div>' : "")+
         '<form class="comment-form" data-comment-form="'+p.id+'">'+
           '<input type="text" class="comment-input" placeholder="댓글을 남겨보세요" maxlength="300" autocomplete="off" />'+
-          '<label class="comment-photo-label" title="사진 첨부">📷<span class="comment-photo-count"></span>'+
+          '<label class="comment-photo-label" title="사진 첨부">이미지 첨부<span class="comment-photo-count"></span>'+
             '<input type="file" class="comment-photo-input" accept="image/*" multiple hidden />'+
           '</label>'+
           '<button type="submit" class="comment-submit">등록</button>'+
@@ -1318,7 +1659,7 @@
     if(db){
       db.collection("posts").doc(post.id).set(post).catch(function(err){
         console.warn("저장 실패", err);
-        alert("서버에 저장하지 못했어요. 네트워크를 확인하고 다시 시도해주세요.");
+        alert(describeSaveError(err));
       });
       // Firestore의 onSnapshot이 알아서 posts를 갱신하고 다시 그려줌
     } else {
@@ -1358,14 +1699,16 @@
     var fileInput = form.querySelector(".comment-photo-input");
     var submitBtn = form.querySelector(".comment-submit");
     var text = input.value.trim();
-    var files = (fileInput && fileInput.files) ? Array.prototype.slice.call(fileInput.files).slice(0,4) : [];
+    var files = (fileInput && fileInput.files) ? Array.prototype.slice.call(fileInput.files).slice(0,3) : [];
     if(!text && !files.length) return; // 텍스트나 사진 중 하나는 있어야 함
     var photos = [];
     if(files.length){
       submitBtn.disabled = true;
       submitBtn.textContent = "업로드 중...";
+      // 댓글 사진은 문서(post) 하나에 다른 댓글/기록 사진들과 함께 저장되기 때문에
+      // 본문 사진(900px)보다 훨씬 작게 압축해서 Firestore 문서 용량(1MB) 제한에 안 걸리게 함.
       for(var i=0;i<files.length;i++){
-        var dataUrl = await resizeImage(files[i]);
+        var dataUrl = await resizeImage(files[i], 480, 0.5);
         if(dataUrl){ photos.push(dataUrl); }
       }
     }
@@ -1376,15 +1719,26 @@
     if(!e.target.classList || !e.target.classList.contains("comment-photo-input")) return;
     var count = e.target.files ? e.target.files.length : 0;
     var countEl = e.target.closest(".comment-photo-label").querySelector(".comment-photo-count");
-    if(countEl){ countEl.textContent = count ? count : ""; }
+    if(countEl){ countEl.textContent = count ? " ("+count+")" : ""; }
   });
+
+  // Firestore 문서 하나는 1MB까지만 저장 가능함. 사진을 base64로 문서 안에 그대로
+  // 저장하는 구조라 사진을 여러 장/여러 번 첨부하면 이 한도에 걸릴 수 있는데, 그때 나는
+  // 에러 메시지가 네트워크 문제와 비슷하게 생겨서 헷갈리기 쉬워 원인을 구분해서 안내함.
+  function describeSaveError(err){
+    var msg = String((err && err.message) || "");
+    if((err && err.code === "invalid-argument") || /longer than|too large|exceeds|maximum.*byte/i.test(msg)){
+      return "사진 용량이 너무 커서 저장하지 못했어요. 사진을 조금만 줄이거나 나눠서 올려주세요.";
+    }
+    return "저장하지 못했어요. 네트워크를 확인하고 다시 시도해주세요.";
+  }
 
   // 댓글은 게시글(post) 문서 안에 comments 배열로 함께 저장함(별도 컬렉션 없이 단순하게).
   function persistComments(postId, newComments){
     if(db){
       db.collection("posts").doc(postId).update({ comments: newComments }).catch(function(err){
         console.warn("댓글 저장 실패", err);
-        alert("댓글을 저장하지 못했어요. 네트워크를 확인해주세요.");
+        alert(describeSaveError(err));
       });
     } else {
       var post = posts.find(function(p){ return p.id === postId; });
@@ -1497,18 +1851,20 @@
     ratingVal = parseInt(e.target.dataset.v,10); paintPicker("starpick", ratingVal);
   });
 
-  function resizeImage(file){
+  function resizeImage(file, maxW, quality){
+    maxW = maxW || 900;
+    quality = quality || 0.72;
     return new Promise(function(resolve){
       var reader = new FileReader();
       reader.onload = function(){
         var img = new Image();
         img.onload = function(){
-          var maxW = 900, scale = Math.min(1, maxW / img.width);
+          var scale = Math.min(1, maxW / img.width);
           var w = Math.round(img.width*scale), h = Math.round(img.height*scale);
           var canvas = document.createElement("canvas");
           canvas.width = w; canvas.height = h;
           canvas.getContext("2d").drawImage(img,0,0,w,h);
-          resolve(canvas.toDataURL("image/jpeg", 0.72));
+          resolve(canvas.toDataURL("image/jpeg", quality));
         };
         img.onerror = function(){ resolve(null); };
         img.src = reader.result;
@@ -1561,6 +1917,7 @@
   me = loadMe();
   if(!me){ openOnboard(); } else { updateMeUI(); }
   startMembersSync();
+  startWishlistSync();
   startDataSync();
 })();
 </script>
