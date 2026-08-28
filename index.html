@@ -638,6 +638,20 @@
     return code;
   }
 
+  // 회원 코드 도입 이전에 만들어진 회원(코드 없음)에게 코드를 나중에 붙여줌.
+  // id는 그대로 두기 때문에 그 회원이 이미 작성한 기록의 authorId 연결은 안 끊김.
+  function assignMemberCode(id){
+    var target = members.find(function(m){ return m.id === id; });
+    if(!target || target.code) return;
+    var updated = { id: target.id, name: target.name, joinedAt: target.joinedAt, code: generateMemberCode() };
+    upsertMember(updated);
+    if(me && me.id === target.id){
+      me = updated;
+      saveMe(me);
+      updateMeUI();
+    }
+  }
+
   function updateMeUI(){
     var bar = document.getElementById("meBar");
     var text = document.getElementById("meText");
@@ -812,6 +826,8 @@
     openOnboard("add");
   });
   document.getElementById("membersFeed").addEventListener("click", function(e){
+    var assignBtn = e.target.closest("[data-assign-code]");
+    if(assignBtn){ assignMemberCode(assignBtn.getAttribute("data-assign-code")); return; }
     var editBtn = e.target.closest("[data-edit-member]");
     if(editBtn){ openEditMember(editBtn.getAttribute("data-edit-member")); return; }
     var delBtn = e.target.closest("[data-del-member]");
@@ -836,14 +852,25 @@
           var count = posts.filter(function(p){
             return p.authorId ? (p.authorId === m.id) : (p.author === m.name);
           }).length;
-          // 마라력: 기록 5개당 1레벨씩 오름 (0~4개 = Lv.1, 5~9개 = Lv.2, ...)
-          var level = Math.floor(count/5) + 1;
+          // "함께 간 사람"으로 참여한 기록 수. participants 배열엔 선택 당시의 표시 라벨
+          // (이름, 또는 동명이인이면 "이름 (#코드)")이 그대로 문자열로 저장돼 있어서
+          // 두 가지 형태 다 매칭해봄.
+          var codedLabel = m.code ? (m.name + " (#" + m.code + ")") : null;
+          var participCount = posts.filter(function(p){
+            if(!p.participants || !p.participants.length) return false;
+            return p.participants.indexOf(m.name) !== -1 || (codedLabel && p.participants.indexOf(codedLabel) !== -1);
+          }).length;
+          // 마라력: 내가 쓴 기록 + 참여한 기록을 합쳐서 5개당 1레벨씩 오름
+          var level = Math.floor((count + participCount)/5) + 1;
           return (
             '<article class="card member-card">'+
               '<div class="card-head"><h2>'+esc(m.name)+(m.code ? ' <span class="member-code">#'+esc(m.code)+'</span>' : '')+'</h2></div>'+
               '<div class="meta-row"><span class="date">'+fmtJoined(m.joinedAt)+' 가입</span>'+
-                '<span class="pill">마라력 Lv.'+level+'</span><span class="pill">기록 '+count+'개</span></div>'+
-              '<div class="card-foot"><span></span><div class="member-actions"><button type="button" class="del" data-edit-member="'+m.id+'">수정</button><button type="button" class="del" data-del-member="'+m.id+'">탈퇴</button></div></div>'+
+                '<span class="pill">마라력 Lv.'+level+'</span><span class="pill">기록 '+count+'개</span>'+
+                '<span class="pill">참여 '+participCount+'개</span></div>'+
+              '<div class="card-foot"><span></span><div class="member-actions">'+
+                (!m.code ? '<button type="button" class="del" data-assign-code="'+m.id+'">코드 발급</button>' : "")+
+                '<button type="button" class="del" data-edit-member="'+m.id+'">수정</button><button type="button" class="del" data-del-member="'+m.id+'">탈퇴</button></div></div>'+
             '</article>'
           );
         }).join("");
