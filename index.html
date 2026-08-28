@@ -119,6 +119,11 @@
     background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;
     padding:14px 20px;font-weight:700;font-size:14.5px;box-shadow:var(--shadow);
   }
+  .fire-marker-wrap{background:transparent;border:none;}
+  .fire-marker{
+    font-size:26px;line-height:1;text-align:center;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));
+  }
   .leaflet-popup-content{font-family:"Pretendard",sans-serif;}
   .popup-card{min-width:160px;}
   .popup-card b{font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;font-size:15px;display:block;margin-bottom:2px;}
@@ -922,6 +927,15 @@
     }
   }catch(err){ console.warn("map init failed", err); }
 
+  // 기본 파란 핀 대신 🔥 이모지 마커를 씀 — 마라 탐방 기록이라는 게시판 컨셉에 맞춰서.
+  var fireIcon = (typeof L !== "undefined") ? L.divIcon({
+    html: '<div class="fire-marker">🔥</div>',
+    className: "fire-marker-wrap",
+    iconSize: [32, 32],
+    iconAnchor: [16, 28],
+    popupAnchor: [0, -26]
+  }) : null;
+
   var markers = {};
   function renderMarkers(){
     if(!map) return;
@@ -930,7 +944,7 @@
     var pts = [];
     posts.forEach(function(p){
       if(typeof p.lat !== "number" || typeof p.lng !== "number") return;
-      var m = L.marker([p.lat, p.lng]).addTo(map);
+      var m = L.marker([p.lat, p.lng], fireIcon ? { icon: fireIcon } : {}).addTo(map);
       var thumb = (p.photos && p.photos[0]) ? '<img src="'+p.photos[0]+'" alt="" />' : "";
       m.bindPopup(
         '<div class="popup-card">'+
