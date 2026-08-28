@@ -195,6 +195,15 @@
   }
   .reaction-btn span{font-family:"IBM Plex Mono",monospace;font-size:12px;margin-left:2px;}
   .reaction-btn.reacted{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+  .wish-achieve-btn{
+    flex:none;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;
+    padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--text-dim);font-family:inherit;
+    white-space:nowrap;
+  }
+  .wish-achieve-btn:hover{color:var(--accent);border-color:var(--accent);}
+  .wish-achieve-btn.achieved{background:var(--accent-2);color:var(--accent-ink);border-color:var(--accent-2);}
+  .wish-card.achieved{opacity:0.62;}
+  .wish-card.achieved .card-head h2{text-decoration:line-through;text-decoration-color:var(--text-dim);}
   .wish-card .comments-section{margin-top:6px;}
   .card-foot{display:flex;justify-content:space-between;align-items:center;padding:10px 20px 16px;font-size:12px;color:var(--text-dim);}
   .card-foot .del{background:none;border:none;color:var(--text-dim);font-size:12px;text-decoration:underline;padding:2px;}
@@ -1413,6 +1422,11 @@
     reactions[emoji] = list;
     persistWishItem(itemId, { reactions: reactions });
   }
+  function toggleWishAchieved(itemId){
+    var item = wishlist.find(function(w){ return w.id === itemId; });
+    if(!item) return;
+    persistWishItem(itemId, { achieved: !item.achieved });
+  }
 
   function renderWishlist(){
     var wrap = document.getElementById("wishFeed");
@@ -1421,7 +1435,11 @@
       wrap.innerHTML = '<div class="empty"><span class="glyph">麻辣</span>아직 등록된 위시리스트가 없어요.<br/>가고 싶은 마라 맛집을 추가해보세요.</div>';
       return;
     }
-    var sorted = wishlist.slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
+    var sorted = wishlist.slice().sort(function(a,b){
+      var aa = a.achieved ? 1 : 0, bb = b.achieved ? 1 : 0;
+      if(aa !== bb) return aa - bb;
+      return (b.createdAt||0)-(a.createdAt||0);
+    });
     wrap.innerHTML = sorted.map(function(w){
       var reactionsHtml = WISH_REACTIONS.map(function(emoji){
         var list = (w.reactions && w.reactions[emoji]) || [];
@@ -1443,8 +1461,12 @@
         );
       }).join("");
       return (
-        '<article class="card wish-card" data-id="'+w.id+'">'+
-          '<div class="card-head"><h2>'+esc(w.name)+'</h2></div>'+
+        '<article class="card wish-card'+(w.achieved ? " achieved" : "")+'" data-id="'+w.id+'">'+
+          '<div class="card-head"><h2>'+esc(w.name)+'</h2>'+
+            '<button type="button" class="wish-achieve-btn'+(w.achieved ? " achieved" : "")+'" data-toggle-achieve="'+w.id+'">'+
+              (w.achieved ? "✅ 달성완료" : "⬜ 달성 체크")+
+            '</button>'+
+          '</div>'+
           (w.address ? '<div class="address">'+esc(w.address)+'</div>' : "")+
           (w.reason ? '<div class="wish-reason">"'+esc(w.reason)+'"</div>' : "")+
           '<div class="card-foot"><span>'+(w.author?esc(w.author)+' 추천':"")+'</span>'+
@@ -1487,6 +1509,7 @@
       authorId: me ? me.id : null,
       comments: [],
       reactions: {},
+      achieved: false,
       createdAt: Date.now()
     };
     document.getElementById("wishComposer").close();
@@ -1505,6 +1528,11 @@
     var reactBtn = e.target.closest("[data-react]");
     if(reactBtn){
       toggleWishReaction(reactBtn.getAttribute("data-wish-id"), reactBtn.getAttribute("data-react"));
+      return;
+    }
+    var achieveBtn = e.target.closest("[data-toggle-achieve]");
+    if(achieveBtn){
+      toggleWishAchieved(achieveBtn.getAttribute("data-toggle-achieve"));
     }
   });
   document.getElementById("wishFeed").addEventListener("submit", function(e){
