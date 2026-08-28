@@ -88,6 +88,10 @@
   .me-bar button{background:none;border:none;color:var(--accent);font-size:12.5px;
     text-decoration:underline;padding:0;}
   .member-card .card-head{padding-bottom:14px;}
+  .member-code{
+    font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:600;
+    color:var(--gold);letter-spacing:0.02em;margin-left:4px;
+  }
 
   nav.tabs{
     max-width:960px;margin:16px auto 0;padding:0 20px;display:flex;gap:4px;width:100%;
@@ -171,6 +175,24 @@
   .card-foot{display:flex;justify-content:space-between;align-items:center;padding:10px 20px 16px;font-size:12px;color:var(--text-dim);}
   .card-foot .del{background:none;border:none;color:var(--text-dim);font-size:12px;text-decoration:underline;padding:2px;}
   .card-foot .del:hover{color:var(--accent);}
+
+  .comments-section{border-top:1px solid var(--border);padding:14px 20px 18px;}
+  .comments-list{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+  .comment-item{background:var(--surface-2);border-radius:9px;padding:8px 12px;}
+  .comment-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;margin-bottom:3px;}
+  .comment-meta b{color:var(--text);font-weight:700;}
+  .comment-del{background:none;border:none;color:var(--text-dim);font-size:11.5px;text-decoration:underline;padding:0;flex:none;}
+  .comment-del:hover{color:var(--accent);}
+  .comment-text{font-size:13.5px;color:var(--text);white-space:pre-wrap;word-break:break-word;}
+  .comment-form{display:flex;gap:8px;}
+  .comment-input{
+    flex:1;background:var(--surface);border:1px solid var(--border);border-radius:9px;
+    padding:9px 12px;font-size:13px;color:var(--text);font-family:inherit;
+  }
+  .comment-submit{
+    background:var(--accent);color:var(--accent-ink);border:none;border-radius:9px;
+    padding:9px 16px;font-size:13px;font-weight:700;flex:none;
+  }
 
   .empty{text-align:center;padding:60px 20px;color:var(--text-dim);}
   .empty .glyph{font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;font-size:38px;color:var(--accent);display:block;margin-bottom:10px;}
@@ -261,11 +283,11 @@
   #lightbox .lb-cap{padding:14px 18px;font-size:13.5px;}
 
   .site-footer{
-    max-width:960px;margin:48px auto 0;padding:28px 20px 32px;
+    max-width:960px;margin:96px auto 0;padding:32px 20px 40px;
     display:flex;flex-direction:column;align-items:center;gap:10px;
     border-top:1px solid var(--border);
   }
-  .footer-logo{width:180px;height:auto;object-fit:contain;opacity:0.9;}
+  .footer-logo{width:110px;height:auto;object-fit:contain;opacity:0.85;}
   .footer-copy{margin:0;font-size:11.5px;letter-spacing:0.04em;color:var(--text-dim);font-family:"IBM Plex Mono",monospace;}
   #lightbox .lb-cap b{font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;display:block;margin-bottom:2px;}
   #lightbox .lb-close{
@@ -565,11 +587,23 @@
     }
   }
 
+  // 이름이 겹치는 회원을 구별하기 위한 4자리 무작위 회원 코드.
+  // 헷갈리기 쉬운 0/O, 1/I 는 빼고 생성하고, 기존 회원과 겹치면 다시 뽑음.
+  function generateMemberCode(){
+    var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    var code;
+    do{
+      code = "";
+      for(var i=0;i<4;i++){ code += chars.charAt(Math.floor(Math.random()*chars.length)); }
+    } while(members.some(function(m){ return m.code === code; }));
+    return code;
+  }
+
   function updateMeUI(){
     var bar = document.getElementById("meBar");
     var text = document.getElementById("meText");
     if(me){
-      text.textContent = me.name + "님 안녕하세요";
+      text.textContent = me.name + (me.code ? " (#"+me.code+")" : "") + "님 안녕하세요";
       bar.style.display = "block";
     } else {
       bar.style.display = "none";
@@ -584,7 +618,7 @@
     var current = sel.value;
     var sorted = members.slice().sort(function(a,b){ return (a.joinedAt||0)-(b.joinedAt||0); });
     sel.innerHTML = '<option value="">-- 회원을 선택하세요 --</option>' +
-      sorted.map(function(m){ return '<option value="'+m.id+'">'+esc(m.name)+'</option>'; }).join("") +
+      sorted.map(function(m){ return '<option value="'+m.id+'">'+esc(m.name)+(m.code ? " (#"+esc(m.code)+")" : "")+'</option>'; }).join("") +
       '<option value="__new__">＋ 새 회원으로 등록</option>';
     if(current && sel.querySelector('option[value="'+current+'"]')){ sel.value = current; }
   }
@@ -663,9 +697,7 @@
     if(onboardMode === "add"){
       var newName = document.getElementById("onboard-name").value.trim();
       if(!newName) return;
-      var exists = members.some(function(m){ return m.name === newName; });
-      if(exists){ alert("이미 명단에 있는 이름이에요."); return; }
-      upsertMember({ id: "m_"+Date.now()+"_"+Math.random().toString(36).slice(2,7), name: newName, joinedAt: Date.now() });
+      upsertMember({ id: "m_"+Date.now()+"_"+Math.random().toString(36).slice(2,7), name: newName, joinedAt: Date.now(), code: generateMemberCode() });
       document.getElementById("onboard").close();
       return;
     }
@@ -676,19 +708,21 @@
       var name = document.getElementById("onboard-name").value.trim();
       if(!name) return;
       if(me){
-        me = { id: me.id, name: name, joinedAt: me.joinedAt };
+        me = { id: me.id, name: name, joinedAt: me.joinedAt, code: me.code || generateMemberCode() };
       } else {
-        me = { id: "m_"+Date.now()+"_"+Math.random().toString(36).slice(2,7), name: name, joinedAt: Date.now() };
+        me = { id: "m_"+Date.now()+"_"+Math.random().toString(36).slice(2,7), name: name, joinedAt: Date.now(), code: generateMemberCode() };
       }
     } else {
       if(!sel.value) return;
       var picked = members.find(function(m){ return m.id === sel.value; });
       if(!picked) return;
-      me = { id: picked.id, name: picked.name, joinedAt: picked.joinedAt };
+      me = { id: picked.id, name: picked.name, joinedAt: picked.joinedAt, code: picked.code };
     }
     saveMe(me);
     upsertMember(me);
     updateMeUI();
+    // 로그인한 회원이 바뀌면 "내 댓글/기록만 삭제 가능" 같은 권한 표시가 달라지므로 다시 그림
+    if(typeof renderAll === "function"){ renderAll(); }
     document.getElementById("onboard").close();
   });
   document.getElementById("onboardCancel").addEventListener("click", function(){
@@ -718,10 +752,13 @@
       } else {
         var sorted = members.slice().sort(function(a,b){ return (a.joinedAt||0)-(b.joinedAt||0); });
         wrap.innerHTML = sorted.map(function(m){
-          var count = posts.filter(function(p){ return p.author === m.name; }).length;
+          // 회원 코드 도입 이전에 작성된 기록(authorId 없음)은 이름으로, 그 이후는 회원 ID로 정확히 매칭함
+          var count = posts.filter(function(p){
+            return p.authorId ? (p.authorId === m.id) : (p.author === m.name);
+          }).length;
           return (
             '<article class="card member-card">'+
-              '<div class="card-head"><h2>'+esc(m.name)+'</h2></div>'+
+              '<div class="card-head"><h2>'+esc(m.name)+(m.code ? ' <span class="member-code">#'+esc(m.code)+'</span>' : '')+'</h2></div>'+
               '<div class="meta-row"><span class="date">'+fmtJoined(m.joinedAt)+' 가입</span>'+
                 '<span class="pill">기록 '+count+'개</span></div>'+
             '</article>'
@@ -1065,9 +1102,36 @@
           (p.note ? '<div class="note">'+esc(p.note)+'</div>' : "")+
           '<div class="card-foot"><span>'+(p.author?esc(p.author)+' 기록':"")+'</span>'+
             '<button type="button" class="del" data-del="'+p.id+'">삭제</button></div>'+
+          renderCommentsSection(p)+
         '</article>'
       );
     }).join("");
+  }
+
+  // 게시글 카드 하단의 댓글 목록 + 입력창. 로그인이 이미 필수라 작성자 이름은
+  // 별도 입력 없이 me.name/me.id 를 그대로 사용함.
+  function renderCommentsSection(p){
+    var list = p.comments || [];
+    var itemsHtml = list.map(function(c){
+      var canDelete = me && c.authorId && c.authorId === me.id;
+      return (
+        '<div class="comment-item">'+
+          '<div class="comment-meta"><b>'+esc(c.author||"익명")+'</b>'+
+            (canDelete ? '<button type="button" class="comment-del" data-del-comment="'+c.id+'" data-post-id="'+p.id+'">삭제</button>' : "")+
+          '</div>'+
+          '<div class="comment-text">'+esc(c.text)+'</div>'+
+        '</div>'
+      );
+    }).join("");
+    return (
+      '<div class="comments-section">'+
+        (list.length ? '<div class="comments-list">'+itemsHtml+'</div>' : "")+
+        '<form class="comment-form" data-comment-form="'+p.id+'">'+
+          '<input type="text" class="comment-input" placeholder="댓글을 남겨보세요" maxlength="300" autocomplete="off" required />'+
+          '<button type="submit" class="comment-submit">등록</button>'+
+        '</form>'+
+      '</div>'
+    );
   }
 
   function renderPhotoGrid(){
@@ -1091,6 +1155,8 @@
     renderMarkers();
     renderFeed();
     renderPhotoGrid();
+    // 회원별 "기록 N개" 숫자는 posts에 의존하므로, posts가 새로고침될 때마다 같이 갱신함
+    if(typeof renderMembers === "function"){ renderMembers(); }
   }
 
   // ---------------- lightbox ----------------
@@ -1136,8 +1202,53 @@
   }
   document.getElementById("feed").addEventListener("click", function(e){
     var btn = e.target.closest("[data-del]");
-    if(btn){ deletePost(btn.getAttribute("data-del")); }
+    if(btn){ deletePost(btn.getAttribute("data-del")); return; }
+    var delCommentBtn = e.target.closest("[data-del-comment]");
+    if(delCommentBtn){
+      if(!confirm("댓글을 삭제할까요?")) return;
+      deleteComment(delCommentBtn.getAttribute("data-post-id"), delCommentBtn.getAttribute("data-del-comment"));
+    }
   });
+  document.getElementById("feed").addEventListener("submit", function(e){
+    var form = e.target.closest("[data-comment-form]");
+    if(!form) return;
+    e.preventDefault();
+    var postId = form.getAttribute("data-comment-form");
+    var input = form.querySelector(".comment-input");
+    var text = input.value.trim();
+    if(!text) return;
+    addComment(postId, text);
+  });
+
+  // 댓글은 게시글(post) 문서 안에 comments 배열로 함께 저장함(별도 컬렉션 없이 단순하게).
+  function persistComments(postId, newComments){
+    if(db){
+      db.collection("posts").doc(postId).update({ comments: newComments }).catch(function(err){
+        console.warn("댓글 저장 실패", err);
+        alert("댓글을 저장하지 못했어요. 네트워크를 확인해주세요.");
+      });
+    } else {
+      var post = posts.find(function(p){ return p.id === postId; });
+      if(post){ post.comments = newComments; saveLocalPosts(posts); renderAll(); }
+    }
+  }
+  function addComment(postId, text){
+    if(!me){ return; } // 로그인 전에는 댓글 폼 자체가 노출되지 않지만 방어적으로 한 번 더 체크
+    var post = posts.find(function(p){ return p.id === postId; });
+    if(!post) return;
+    var comment = {
+      id: "c_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),
+      authorId: me.id, author: me.name, text: text, createdAt: Date.now()
+    };
+    var newComments = (post.comments || []).concat([comment]);
+    persistComments(postId, newComments);
+  }
+  function deleteComment(postId, commentId){
+    var post = posts.find(function(p){ return p.id === postId; });
+    if(!post) return;
+    var newComments = (post.comments || []).filter(function(c){ return c.id !== commentId; });
+    persistComments(postId, newComments);
+  }
   document.getElementById("searchInput").addEventListener("input", renderFeed);
   document.getElementById("sortSelect").addEventListener("change", renderFeed);
 
@@ -1158,11 +1269,15 @@
       participantDropdown.innerHTML = '<div class="empty-note">등록된 회원이 없어요. 먼저 회원 탭에서 추가해주세요.</div>';
       return;
     }
+    // 이름이 겹치는 회원이 있으면 회원 코드를 붙여서 구분함
+    var nameCounts = {};
+    members.forEach(function(m){ nameCounts[m.name] = (nameCounts[m.name]||0) + 1; });
     var sorted = members.slice().sort(function(a,b){ return (a.joinedAt||0)-(b.joinedAt||0); });
     participantDropdown.innerHTML = sorted.map(function(m){
-      var on = selectedParticipants.indexOf(m.name) !== -1;
-      return '<button type="button" class="participant-option'+(on?" selected":"")+'" data-name="'+esc(m.name)+'">'+
-        '<span class="check">'+(on?"✓":"")+'</span>'+esc(m.name)+
+      var label = m.name + ((nameCounts[m.name] > 1 && m.code) ? " (#"+m.code+")" : "");
+      var on = selectedParticipants.indexOf(label) !== -1;
+      return '<button type="button" class="participant-option'+(on?" selected":"")+'" data-label="'+esc(label)+'">'+
+        '<span class="check">'+(on?"✓":"")+'</span>'+esc(label)+
       '</button>';
     }).join("");
   }
@@ -1177,11 +1292,11 @@
     // innerHTML을 통째로 다시 그리면 클릭 이벤트가 버블링되는 도중 대상 노드가
     // 이미 DOM에서 떨어져나가 document의 바깥클릭 감지(closest)가 실패하므로,
     // 여기서는 해당 버튼만 직접 갱신함.
-    var name = btn.dataset.name;
-    var idx = selectedParticipants.indexOf(name);
+    var label = btn.dataset.label;
+    var idx = selectedParticipants.indexOf(label);
     var checkEl = btn.querySelector(".check");
     if(idx === -1){
-      selectedParticipants.push(name);
+      selectedParticipants.push(label);
       btn.classList.add("selected");
       if(checkEl){ checkEl.textContent = "✓"; }
     } else {
@@ -1274,6 +1389,7 @@
       note: document.getElementById("f-note").value.trim(),
       photos: pendingPhotos.slice(),
       author: document.getElementById("f-author").value.trim(),
+      authorId: me ? me.id : null,
       createdAt: Date.now()
     };
     dlg.close();
