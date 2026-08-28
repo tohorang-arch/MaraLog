@@ -43,12 +43,11 @@
   }
 
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;height:100%;}
+  html,body{margin:0;padding:0;}
   body{
     background:var(--bg); color:var(--text);
     font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;
     line-height:1.6; -webkit-font-smoothing:antialiased;
-    display:flex; flex-direction:column; min-height:100vh;
   }
   ::selection{background:var(--accent);color:var(--accent-ink);}
   button{font-family:inherit;cursor:pointer;}
@@ -87,15 +86,17 @@
   }
   nav.tabs button.active{color:var(--accent);border-bottom-color:var(--accent);}
 
-  main{flex:1;display:flex;flex-direction:column;min-height:0;}
-  section.tab{display:none;flex:1;min-height:0;flex-direction:column;}
-  section.tab.active{display:flex;}
+  main{display:block;}
+  section.tab{display:none;}
+  section.tab.active{display:block;}
 
-  #map{flex:1;min-height:360px;width:100%;}
+  /* 화면을 전부 채우던 지도를 다른 섹션처럼 적당한 고정 높이로 제한 */
+  #map{width:100%;height:60vh;max-height:520px;min-height:320px;}
   /* 무료·무키 정책이 계속 안정적인 표준 OSM 타일을 쓰되, 채도와 대비를 낮춰
      시각적으로 더 단순하고 차분하게 보이도록 다듬음. */
   .map-tiles-simple{ filter: grayscale(38%) saturate(55%) contrast(92%) brightness(1.1); }
-  .map-shell{position:relative;flex:1;display:flex;}
+  /* 헤더/탭과 같은 폭(960px)에 맞춰서 지도도 좌우로 꽉 차지 않게 정렬 */
+  .map-shell{position:relative;max-width:960px;margin:0 auto;width:100%;padding:0 20px;}
   .fab{
     position:absolute;right:20px;bottom:24px;z-index:500;
     background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;
@@ -498,7 +499,7 @@
   //  3) 앱 설정 > 플랫폼 > Web 에 이 페이지가 열릴 도메인을 등록
   //     (예: https://내아이디.github.io — 로컬에서 테스트할 땐 http://localhost:포트도 추가)
   //  4) 아래 KAKAO_JS_KEY 에 붙여넣기
-  var KAKAO_JS_KEY = "d779acf887fb153b502e8bd629ce0b32"; // 예: "1a2b3c4d5e6f7g8h9i0j..." — 비워두면 Nominatim만 사용
+  var KAKAO_JS_KEY = "d779acf887fb153b502e8bd629ce0b32"; // 비워두면("") Nominatim만 사용
 
   var kakaoReady = false;
   if(KAKAO_JS_KEY){
