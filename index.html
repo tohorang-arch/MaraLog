@@ -167,6 +167,15 @@
   .meta-row{display:flex;flex-wrap:wrap;gap:8px 14px;padding:8px 20px 14px;font-size:13px;color:var(--text-dim);align-items:center;}
   .meta-row .date{font-family:"IBM Plex Mono",monospace;color:var(--text);}
   .pill{display:inline-flex;align-items:center;gap:4px;background:var(--surface-2);border-radius:999px;padding:3px 10px;font-size:12.5px;}
+  /* 마라력 레벨이 오를수록 순한맛(초록)에서 매운맛(붉은빛)으로 뱃지 색이 진해짐 */
+  .pill.level-1{background:rgba(148,184,120,0.18);color:#b9dba2;font-weight:700;}
+  .pill.level-2{background:rgba(224,196,119,0.20);color:var(--gold);font-weight:700;}
+  .pill.level-3{background:rgba(224,150,70,0.22);color:#f3ab5c;font-weight:700;}
+  .pill.level-4{background:rgba(226,73,60,0.22);color:#ff8d78;font-weight:700;}
+  .pill.level-5{
+    background:linear-gradient(135deg, rgba(226,73,60,0.35), rgba(120,20,15,0.5));
+    color:#ffd7a8;font-weight:700;box-shadow:0 0 10px rgba(226,73,60,0.35);
+  }
   .spice{color:var(--accent);letter-spacing:1px;}
   .rating{color:var(--gold);letter-spacing:1px;}
   .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:var(--border);}
@@ -858,6 +867,8 @@
           var codedLabel = m.code ? (m.name + " (#" + m.code + ")") : null;
           var participCount = posts.filter(function(p){
             if(!p.participants || !p.participants.length) return false;
+            var isAuthor = p.authorId ? (p.authorId === m.id) : (p.author === m.name);
+            if(isAuthor) return false; // 본인이 쓴 기록에 스스로를 참여자로 넣었어도 중복 카운팅하지 않음
             return p.participants.indexOf(m.name) !== -1 || (codedLabel && p.participants.indexOf(codedLabel) !== -1);
           }).length;
           // 마라력: 내가 쓴 기록 + 참여한 기록을 합쳐서 5개당 1레벨씩 오름
@@ -866,7 +877,7 @@
             '<article class="card member-card">'+
               '<div class="card-head"><h2>'+esc(m.name)+(m.code ? ' <span class="member-code">#'+esc(m.code)+'</span>' : '')+'</h2></div>'+
               '<div class="meta-row"><span class="date">'+fmtJoined(m.joinedAt)+' 가입</span>'+
-                '<span class="pill">마라력 Lv.'+level+'</span><span class="pill">기록 '+count+'개</span>'+
+                '<span class="pill level-'+Math.min(level,5)+'">마라력 Lv.'+level+'</span><span class="pill">기록 '+count+'개</span>'+
                 '<span class="pill">참여 '+participCount+'개</span></div>'+
               '<div class="card-foot"><span></span><div class="member-actions">'+
                 (!m.code ? '<button type="button" class="del" data-assign-code="'+m.id+'">코드 발급</button>' : "")+
