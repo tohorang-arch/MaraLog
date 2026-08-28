@@ -81,6 +81,13 @@
     background:var(--surface-2);border:1px dashed var(--border);border-radius:10px;
     padding:9px 14px;font-size:12px;color:var(--text-dim);margin:0;
   }
+  .me-bar{
+    text-align:center;font-size:12.5px;color:var(--text-dim);margin:10px auto 0;
+  }
+  .me-bar #meText{color:var(--text);font-weight:700;}
+  .me-bar button{background:none;border:none;color:var(--accent);font-size:12.5px;
+    text-decoration:underline;padding:0;}
+  .member-card .card-head{padding-bottom:14px;}
 
   nav.tabs{
     max-width:960px;margin:16px auto 0;padding:0 20px;display:flex;gap:4px;width:100%;
@@ -255,11 +262,13 @@
 </div>
 
 <div class="device-note"><p id="deviceNoteText">이 페이지는 지금은 이 브라우저에만 기록을 저장해요. 모임원들과 실시간으로 공유하려면 다음 단계에서 데이터 저장소(Firebase) 연동이 필요해요.</p></div>
+<div class="me-bar" id="meBar" style="display:none"><span id="meText"></span> · <button type="button" id="meChange">이름 변경</button></div>
 
 <nav class="tabs">
   <button data-tab="map" class="active">지도</button>
   <button data-tab="board">게시판</button>
   <button data-tab="photos">포토 게시판</button>
+  <button data-tab="members">회원</button>
 </nav>
 
 <main>
@@ -287,6 +296,16 @@
 
   <section class="tab" id="tab-photos">
     <div class="photo-grid" id="photoGrid"></div>
+  </section>
+
+  <section class="tab" id="tab-members">
+    <div class="wrap board-wrap">
+      <div class="toolbar">
+        <div style="flex:1;font-size:13px;color:var(--text-dim);">마라진리회 회원 명단이에요.</div>
+        <button type="button" class="btn-ghost" id="addMemberBtn">+ 회원 추가</button>
+      </div>
+      <div class="feed" id="membersFeed"></div>
+    </div>
   </section>
 </main>
 
@@ -366,6 +385,25 @@
   </div>
 </dialog>
 
+<dialog id="onboard">
+  <form class="composer-inner" id="onboardForm">
+    <h3 id="onboardTitle">어서오세요</h3>
+    <p id="onboardDesc" style="font-size:13.5px;color:var(--text-dim);margin:-8px 0 16px;">마라진리회 회원 명단에서 본인 이름을 선택해주세요. 다음에 다시 들어와도 자동으로 기억해둬요.</p>
+    <div class="field" id="onboard-select-field" style="display:none">
+      <label>회원 선택</label>
+      <select id="onboard-select"></select>
+    </div>
+    <div class="field" id="onboard-name-field">
+      <label>이름</label>
+      <input type="text" id="onboard-name" placeholder="예: 햇쭈" />
+    </div>
+    <div class="composer-actions">
+      <button type="button" class="btn-ghost" id="onboardCancel" style="display:none">취소</button>
+      <button type="submit" class="btn-primary">시작하기</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
 (function(){
   "use strict";
@@ -439,6 +477,205 @@
     }
   }
 
+  // ---------------------------------------------------------------
+  // Members (누가 이 게시판을 쓰는지). posts와 같은 방식으로 Firestore
+  // 또는 localStorage에 저장하고, 실시간으로 목록을 갱신함.
+  // ---------------------------------------------------------------
+  var MEMBERS_STORAGE_KEY = "malalog_members_v1";
+  var ME_KEY = "malalog_me_v1";
+  var members = [];
+  var me = null;
+
+  function loadLocalMembers(){
+    try{ var raw = localStorage.getItem(MEMBERS_STORAGE_KEY); return raw ? JSON.parse(raw) : []; }
+    catch(e){ return []; }
+  }
+  function saveLocalMembers(list){
+    try{ localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(list)); }catch(e){}
+  }
+  function loadMe(){
+    try{ var raw = localStorage.getItem(ME_KEY); return raw ? JSON.parse(raw) : null; }
+    catch(e){ return null; }
+  }
+  function saveMe(m){
+    try{ localStorage.setItem(ME_KEY, JSON.stringify(m)); }catch(e){}
+  }
+
+  function startMembersSync(){
+    if(db){
+      db.collection("members").onSnapshot(function(snapshot){
+        members = snapshot.docs.map(function(d){ return d.data(); });
+        renderMembers();
+        if(document.getElementById("onboard").open && onboardMode === "login"){ refreshOnboardSelect(); }
+      }, function(err){
+        console.warn("회원 목록 동기화 실패, 로컬로 대체합니다.", err);
+        members = loadLocalMembers();
+        renderMembers();
+      });
+    } else {
+      members = loadLocalMembers();
+      renderMembers();
+    }
+  }
+
+  function upsertMember(m){
+    if(db){
+      db.collection("members").doc(m.id).set(m).catch(function(err){
+        console.warn("회원 등록 실패", err);
+      });
+    } else {
+      var idx = members.findIndex(function(x){ return x.id === m.id; });
+      if(idx === -1){ members.push(m); } else { members[idx] = m; }
+      saveLocalMembers(members);
+      renderMembers();
+    }
+  }
+
+  function updateMeUI(){
+    var bar = document.getElementById("meBar");
+    var text = document.getElementById("meText");
+    if(me){
+      text.textContent = me.name + "님 안녕하세요";
+      bar.style.display = "block";
+    } else {
+      bar.style.display = "none";
+    }
+  }
+
+  var onboardMode = "login";
+
+  function refreshOnboardSelect(){
+    var sel = document.getElementById("onboard-select");
+    var current = sel.value;
+    var sorted = members.slice().sort(function(a,b){ return (a.joinedAt||0)-(b.joinedAt||0); });
+    sel.innerHTML = '<option value="">-- 회원을 선택하세요 --</option>' +
+      sorted.map(function(m){ return '<option value="'+m.id+'">'+esc(m.name)+'</option>'; }).join("") +
+      '<option value="__new__">＋ 새 회원으로 등록</option>';
+    if(current && sel.querySelector('option[value="'+current+'"]')){ sel.value = current; }
+  }
+
+  function toggleOnboardNameField(showName){
+    document.getElementById("onboard-name-field").style.display = showName ? "block" : "none";
+  }
+
+  document.getElementById("onboard-select").addEventListener("change", function(){
+    var isNew = this.value === "__new__";
+    toggleOnboardNameField(isNew);
+    if(isNew){
+      document.getElementById("onboard-name").value = "";
+      document.getElementById("onboard-name").focus();
+    }
+  });
+
+  function openOnboard(mode, prefillName){
+    onboardMode = mode || "login";
+    var titleEl = document.getElementById("onboardTitle");
+    var descEl = document.getElementById("onboardDesc");
+    var selectField = document.getElementById("onboard-select-field");
+    var nameInput = document.getElementById("onboard-name");
+    var sel = document.getElementById("onboard-select");
+
+    if(onboardMode === "add"){
+      titleEl.textContent = "회원 추가";
+      descEl.textContent = "명단에 새로 추가할 회원 이름을 입력해주세요.";
+      selectField.style.display = "none";
+      toggleOnboardNameField(true);
+      nameInput.value = "";
+      document.getElementById("onboardCancel").style.display = "inline-block";
+    } else {
+      titleEl.textContent = "어서오세요";
+      descEl.textContent = "마라진리회 회원 명단에서 본인 이름을 선택해주세요. 다음에 다시 들어와도 자동으로 기억해둬요.";
+      if(members.length){
+        selectField.style.display = "block";
+        refreshOnboardSelect();
+        var existing = prefillName ? members.find(function(m){ return m.name === prefillName; }) : null;
+        sel.value = existing ? existing.id : "";
+        toggleOnboardNameField(sel.value === "__new__" || !existing && !!prefillName);
+        nameInput.value = (!existing && prefillName) ? prefillName : "";
+        if(!existing && prefillName){ sel.value = "__new__"; }
+      } else {
+        selectField.style.display = "none";
+        toggleOnboardNameField(true);
+        nameInput.value = prefillName || "";
+      }
+      document.getElementById("onboardCancel").style.display = prefillName ? "inline-block" : "none";
+    }
+    document.getElementById("onboard").showModal();
+  }
+
+  document.getElementById("onboardForm").addEventListener("submit", function(e){
+    e.preventDefault();
+
+    if(onboardMode === "add"){
+      var newName = document.getElementById("onboard-name").value.trim();
+      if(!newName) return;
+      var exists = members.some(function(m){ return m.name === newName; });
+      if(exists){ alert("이미 명단에 있는 이름이에요."); return; }
+      upsertMember({ id: "m_"+Date.now()+"_"+Math.random().toString(36).slice(2,7), name: newName, joinedAt: Date.now() });
+      document.getElementById("onboard").close();
+      return;
+    }
+
+    var sel = document.getElementById("onboard-select");
+    var useNameField = !members.length || sel.value === "__new__";
+    if(useNameField){
+      var name = document.getElementById("onboard-name").value.trim();
+      if(!name) return;
+      if(me){
+        me = { id: me.id, name: name, joinedAt: me.joinedAt };
+      } else {
+        me = { id: "m_"+Date.now()+"_"+Math.random().toString(36).slice(2,7), name: name, joinedAt: Date.now() };
+      }
+    } else {
+      if(!sel.value) return;
+      var picked = members.find(function(m){ return m.id === sel.value; });
+      if(!picked) return;
+      me = { id: picked.id, name: picked.name, joinedAt: picked.joinedAt };
+    }
+    saveMe(me);
+    upsertMember(me);
+    updateMeUI();
+    document.getElementById("onboard").close();
+  });
+  document.getElementById("onboardCancel").addEventListener("click", function(){
+    document.getElementById("onboard").close();
+  });
+  document.getElementById("onboard").addEventListener("cancel", function(e){
+    if(onboardMode === "login" && !me){ e.preventDefault(); } // 최초 1회는 선택 전엔 닫을 수 없게
+  });
+  document.getElementById("meChange").addEventListener("click", function(){
+    openOnboard("login", me ? me.name : "");
+  });
+  document.getElementById("addMemberBtn").addEventListener("click", function(){
+    openOnboard("add");
+  });
+
+  function fmtJoined(ts){
+    if(!ts) return "";
+    var d = new Date(ts);
+    return d.getFullYear()+"."+String(d.getMonth()+1).padStart(2,"0")+"."+String(d.getDate()).padStart(2,"0");
+  }
+
+  function renderMembers(){
+    var wrap = document.getElementById("membersFeed");
+    if(!wrap) return;
+    if(!members.length){
+      wrap.innerHTML = '<div class="empty"><span class="glyph">麻辣</span>아직 등록된 회원이 없어요.</div>';
+      return;
+    }
+    var sorted = members.slice().sort(function(a,b){ return (a.joinedAt||0)-(b.joinedAt||0); });
+    wrap.innerHTML = sorted.map(function(m){
+      var count = posts.filter(function(p){ return p.author === m.name; }).length;
+      return (
+        '<article class="card member-card">'+
+          '<div class="card-head"><h2>'+esc(m.name)+'</h2></div>'+
+          '<div class="meta-row"><span class="date">'+fmtJoined(m.joinedAt)+' 가입</span>'+
+            '<span class="pill">기록 '+count+'개</span></div>'+
+        '</article>'
+      );
+    }).join("");
+  }
+
   function esc(s){
     return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
       return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
@@ -457,7 +694,7 @@
 
   // ---------------- tabs ----------------
   var tabButtons = document.querySelectorAll("nav.tabs button");
-  var tabSections = { map: document.getElementById("tab-map"), board: document.getElementById("tab-board"), photos: document.getElementById("tab-photos") };
+  var tabSections = { map: document.getElementById("tab-map"), board: document.getElementById("tab-board"), photos: document.getElementById("tab-photos"), members: document.getElementById("tab-members") };
   tabButtons.forEach(function(btn){
     btn.addEventListener("click", function(){
       tabButtons.forEach(function(b){ b.classList.remove("active"); });
@@ -859,6 +1096,7 @@
     document.getElementById("thumbs").innerHTML = "";
     paintPicker("spicepick", 0); paintPicker("starpick", 0);
     document.getElementById("f-date").value = new Date().toISOString().slice(0,10);
+    document.getElementById("f-author").value = me ? me.name : "";
   }
   function paintPicker(id, val){
     var wrap = document.getElementById(id);
@@ -932,6 +1170,9 @@
 
   // ---------------- boot ----------------
   document.getElementById("f-date").value = new Date().toISOString().slice(0,10);
+  me = loadMe();
+  if(!me){ openOnboard(); } else { updateMeUI(); }
+  startMembersSync();
   startDataSync();
 })();
 </script>
