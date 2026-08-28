@@ -178,6 +178,14 @@
   }
   .spice{color:var(--accent);letter-spacing:1px;}
   .rating{color:var(--gold);letter-spacing:1px;}
+  .card-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .spice-badge{font-size:13px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:2px 9px;}
+  .like-btn{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:999px;
+    padding:5px 12px;font-size:13px;cursor:pointer;color:var(--text);font-family:inherit;
+  }
+  .like-btn span{font-family:"IBM Plex Mono",monospace;font-size:12px;margin-left:2px;}
+  .like-btn.liked{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
   .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:var(--border);}
   .photo-tile{position:relative;aspect-ratio:1/1;overflow:hidden;background:var(--surface-2);}
   .photo-tile img{width:100%;height:100%;object-fit:cover;display:block;cursor:pointer;}
@@ -206,6 +214,7 @@
   .wish-card.achieved .card-head h2{text-decoration:line-through;text-decoration-color:var(--text-dim);}
   .wish-card .comments-section{margin-top:6px;}
   .card-foot{display:flex;justify-content:space-between;align-items:center;padding:10px 20px 16px;font-size:12px;color:var(--text-dim);}
+  .card-foot-actions{display:flex;align-items:center;gap:10px;}
   .card-foot .del{background:none;border:none;color:var(--text-dim);font-size:12px;text-decoration:underline;padding:2px;}
   .card-foot .del:hover{color:var(--accent);}
 
@@ -338,6 +347,18 @@
     position:absolute;top:8px;right:10px;background:rgba(0,0,0,0.55);color:#fff;
     border:none;border-radius:999px;width:30px;height:30px;font-size:16px;
   }
+  #lightbox .lb-arrow{
+    position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.45);color:#fff;
+    border:none;border-radius:999px;width:38px;height:38px;font-size:22px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;z-index:5;
+  }
+  #lightbox .lb-arrow:hover{background:rgba(0,0,0,0.7);}
+  #lightbox .lb-prev{left:8px;}
+  #lightbox .lb-next{right:8px;}
+  #lightbox .lb-counter{
+    float:right;font-family:"IBM Plex Mono",monospace;color:var(--text-dim);font-size:12px;
+  }
+  .photo-grid button{cursor:pointer;}
 
   @media (prefers-reduced-motion:no-preference){ .card{transition:outline-color .2s ease;} }
 </style>
@@ -519,8 +540,10 @@
 <dialog id="lightbox">
   <div class="lb-inner" style="position:relative">
     <button class="lb-close" id="lbClose">×</button>
+    <button type="button" class="lb-arrow lb-prev" id="lbPrev" style="display:none">‹</button>
+    <button type="button" class="lb-arrow lb-next" id="lbNext" style="display:none">›</button>
     <img id="lbImg" src="" alt="" />
-    <div class="lb-cap"><b id="lbTitle"></b><span id="lbSub"></span></div>
+    <div class="lb-cap"><b id="lbTitle"></b><span id="lbSub"></span><span class="lb-counter" id="lbCounter"></span></div>
   </div>
 </dialog>
 
@@ -1591,15 +1614,21 @@
       }
       var participants = (p.participants&&p.participants.length)
         ? p.participants.map(function(n){return '<span class="pill">'+esc(n)+'</span>';}).join("") : "";
+      var liked = p.likes && me && p.likes.indexOf(me.id) !== -1;
+      var likeCount = (p.likes || []).length;
       return (
         '<article class="card" data-id="'+p.id+'">'+
-          '<div class="card-head"><h2>'+esc(p.restaurant)+'</h2>'+(p.rating ? stars(p.rating,"★","rating") : "")+'</div>'+
+          '<div class="card-head"><div class="card-title-row"><h2>'+esc(p.restaurant)+'</h2>'+
+            (p.spice ? '<span class="spice-badge">'+stars(p.spice,"🌶","spice")+'</span>' : "")+
+          '</div>'+(p.rating ? stars(p.rating,"★","rating") : "")+'</div>'+
           (p.address ? '<div class="address">'+esc(p.address)+'</div>' : "")+
-          '<div class="meta-row"><span class="date">'+fmtDate(p.date)+'</span>'+
-            (p.spice ? '<span class="pill">'+stars(p.spice,"🌶","spice")+'</span>' : "")+participants+'</div>'+
+          '<div class="meta-row"><span class="date">'+fmtDate(p.date)+'</span>'+participants+'</div>'+
           photosHtml+
           (p.note ? '<div class="note">'+esc(p.note)+'</div>' : "")+
-          '<div class="card-foot"><span>'+(p.author?esc(p.author)+' 기록':"")+'</span>'+
+          '<div class="card-foot"><div class="card-foot-actions">'+
+              '<span>'+(p.author?esc(p.author)+' 기록':"")+'</span>'+
+              '<button type="button" class="like-btn'+(liked?" liked":"")+'" data-like="'+p.id+'">👍'+(likeCount?' <span>'+likeCount+'</span>':"")+'</button>'+
+            '</div>'+
             '<button type="button" class="del" data-del="'+p.id+'">삭제</button></div>'+
           renderCommentsSection(p)+
         '</article>'
@@ -1643,19 +1672,23 @@
     );
   }
 
+  var photoGridItems = [];
   function renderPhotoGrid(){
     var grid = document.getElementById("photoGrid");
     var items = [];
     posts.forEach(function(p){
-      (p.photos||[]).forEach(function(src){ items.push({src:src, restaurant:p.restaurant, date:p.date}); });
+      (p.photos||[]).forEach(function(src){ items.push({src:src, restaurant:p.restaurant, sub: fmtDate(p.date)}); });
+      (p.comments||[]).forEach(function(c){
+        (c.photos||[]).forEach(function(src){ items.push({src:src, restaurant:p.restaurant, sub: (c.author||"익명")+"님 댓글 사진"}); });
+      });
     });
-    items.sort(function(){ return 0; });
+    photoGridItems = items;
     if(items.length===0){
       grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><span class="glyph">麻辣</span>아직 올라온 사진이 없어요.</div>';
       return;
     }
-    grid.innerHTML = items.map(function(it){
-      return '<button type="button" data-lightbox="'+esc(it.src)+'" data-cap="'+esc(it.restaurant)+'|'+esc(fmtDate(it.date))+'"><img src="'+it.src+'" alt="'+esc(it.restaurant)+'" loading="lazy" /></button>';
+    grid.innerHTML = items.map(function(it, idx){
+      return '<button type="button" data-photo-idx="'+idx+'"><img src="'+it.src+'" alt="'+esc(it.restaurant)+'" loading="lazy" /></button>';
     }).join("");
   }
 
@@ -1670,17 +1703,57 @@
 
   // ---------------- lightbox ----------------
   var lightbox = document.getElementById("lightbox");
+  var galleryIndex = -1;
+  function showLightboxArrows(show){
+    document.getElementById("lbPrev").style.display = show ? "flex" : "none";
+    document.getElementById("lbNext").style.display = show ? "flex" : "none";
+  }
+  function openGalleryAt(idx){
+    if(!photoGridItems.length) return;
+    idx = ((idx % photoGridItems.length) + photoGridItems.length) % photoGridItems.length;
+    galleryIndex = idx;
+    var it = photoGridItems[idx];
+    document.getElementById("lbImg").src = it.src;
+    document.getElementById("lbTitle").textContent = it.restaurant || "";
+    document.getElementById("lbSub").textContent = it.sub || "";
+    document.getElementById("lbCounter").textContent = photoGridItems.length > 1 ? (idx+1)+" / "+photoGridItems.length : "";
+    showLightboxArrows(photoGridItems.length > 1);
+    lightbox.showModal();
+  }
   document.addEventListener("click", function(e){
+    var galleryBtn = e.target.closest("[data-photo-idx]");
+    if(galleryBtn){
+      openGalleryAt(parseInt(galleryBtn.getAttribute("data-photo-idx"), 10));
+      return;
+    }
     var t = e.target.closest("[data-lightbox]");
     if(!t) return;
+    galleryIndex = -1;
     var cap = (t.getAttribute("data-cap")||"").split("|");
     document.getElementById("lbImg").src = t.getAttribute("data-lightbox");
     document.getElementById("lbTitle").textContent = cap[0]||"";
     document.getElementById("lbSub").textContent = cap[1]||"";
+    document.getElementById("lbCounter").textContent = "";
+    showLightboxArrows(false);
     lightbox.showModal();
   });
   document.getElementById("lbClose").addEventListener("click", function(){ lightbox.close(); });
   lightbox.addEventListener("click", function(e){ if(e.target === lightbox) lightbox.close(); });
+  document.getElementById("lbPrev").addEventListener("click", function(e){
+    e.stopPropagation();
+    if(galleryIndex === -1) return;
+    openGalleryAt(galleryIndex - 1);
+  });
+  document.getElementById("lbNext").addEventListener("click", function(e){
+    e.stopPropagation();
+    if(galleryIndex === -1) return;
+    openGalleryAt(galleryIndex + 1);
+  });
+  document.addEventListener("keydown", function(e){
+    if(!lightbox.open || galleryIndex === -1) return;
+    if(e.key === "ArrowLeft"){ openGalleryAt(galleryIndex - 1); }
+    if(e.key === "ArrowRight"){ openGalleryAt(galleryIndex + 1); }
+  });
 
   // ---------------- add / delete ----------------
   function addPost(post){
@@ -1710,6 +1783,8 @@
     }
   }
   document.getElementById("feed").addEventListener("click", function(e){
+    var likeBtn = e.target.closest("[data-like]");
+    if(likeBtn){ toggleLike(likeBtn.getAttribute("data-like")); return; }
     var btn = e.target.closest("[data-del]");
     if(btn){ deletePost(btn.getAttribute("data-del")); return; }
     var delCommentBtn = e.target.closest("[data-del-comment]");
@@ -1759,6 +1834,28 @@
       return "사진 용량이 너무 커서 저장하지 못했어요. 사진을 조금만 줄이거나 나눠서 올려주세요.";
     }
     return "저장하지 못했어요. 네트워크를 확인하고 다시 시도해주세요.";
+  }
+
+  // 게시글 문서 일부 필드만 바꿔 저장하는 공용 함수(좋아요 등).
+  function persistPostPatch(postId, patch){
+    if(db){
+      db.collection("posts").doc(postId).update(patch).catch(function(err){
+        console.warn("게시글 업데이트 실패", err);
+        alert(describeSaveError(err));
+      });
+    } else {
+      var post = posts.find(function(p){ return p.id === postId; });
+      if(post){ Object.assign(post, patch); saveLocalPosts(posts); renderAll(); }
+    }
+  }
+  function toggleLike(postId){
+    if(!me) return;
+    var post = posts.find(function(p){ return p.id === postId; });
+    if(!post) return;
+    var likes = (post.likes || []).slice();
+    var idx = likes.indexOf(me.id);
+    if(idx === -1){ likes.push(me.id); } else { likes.splice(idx, 1); }
+    persistPostPatch(postId, { likes: likes });
   }
 
   // 댓글은 게시글(post) 문서 안에 comments 배열로 함께 저장함(별도 컬렉션 없이 단순하게).
@@ -1934,6 +2031,7 @@
       photos: pendingPhotos.slice(),
       author: document.getElementById("f-author").value.trim(),
       authorId: me ? me.id : null,
+      likes: [],
       createdAt: Date.now()
     };
     dlg.close();
