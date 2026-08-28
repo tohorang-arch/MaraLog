@@ -88,6 +88,7 @@
   .me-bar button{background:none;border:none;color:var(--accent);font-size:12.5px;
     text-decoration:underline;padding:0;}
   .member-card .card-head{padding-bottom:14px;}
+  .member-actions{display:flex;gap:14px;}
   .member-code{
     font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:600;
     color:var(--gold);letter-spacing:0.02em;margin-left:4px;
@@ -313,14 +314,14 @@
 <div class="me-bar" id="meBar" style="display:none"><span id="meText"></span> · <button type="button" id="meChange">이름 변경</button></div>
 
 <nav class="tabs">
-  <button data-tab="map" class="active">지도</button>
-  <button data-tab="board">게시판</button>
+  <button data-tab="map">지도</button>
+  <button data-tab="board" class="active">게시판</button>
   <button data-tab="photos">포토 게시판</button>
   <button data-tab="members">회원</button>
 </nav>
 
 <main>
-  <section class="tab active" id="tab-map">
+  <section class="tab" id="tab-map">
     <div class="map-shell">
       <div id="map"></div>
       <div class="pick-hint-banner" id="pickHintBanner">지도에서 위치를 클릭하세요</div>
@@ -328,7 +329,7 @@
     </div>
   </section>
 
-  <section class="tab" id="tab-board">
+  <section class="tab active" id="tab-board">
     <div class="wrap board-wrap">
       <div class="toolbar">
         <input class="search" id="searchInput" type="text" placeholder="식당 이름으로 검색" />
@@ -337,6 +338,7 @@
           <option value="rating">평점 높은순</option>
           <option value="spice">매운맛 강한순</option>
         </select>
+        <button type="button" class="btn-primary" id="openComposerBoard">+ 기록 남기기</button>
       </div>
       <div class="feed" id="feed"></div>
     </div>
@@ -587,6 +589,30 @@
     }
   }
 
+  // 회원 탈퇴. 예전에 회원 코드 없이 등록된 회원을 지우고 다시 등록하는 용도로도 씀.
+  // 작성했던 기록/댓글 자체는 지우지 않고 그대로 둠(작성자 이름 표시만 남음).
+  function deleteMember(id){
+    if(!confirm("이 회원을 탈퇴시킬까요? 이 회원이 작성한 기록/댓글은 삭제되지 않아요.")) return;
+    if(db){
+      db.collection("members").doc(id).delete().catch(function(err){
+        console.warn("회원 탈퇴 실패", err);
+        alert("탈퇴 처리에 실패했어요. 네트워크를 확인해주세요.");
+      });
+    } else {
+      members = members.filter(function(m){ return m.id !== id; });
+      saveLocalMembers(members);
+      renderMembers();
+    }
+    // 지금 로그인해 있는 나 자신을 탈퇴시킨 경우, 로그아웃 상태로 돌리고 다시 등록하게 함
+    if(me && me.id === id){
+      me = null;
+      saveMe(null);
+      updateMeUI();
+      if(typeof renderAll === "function"){ renderAll(); }
+      openOnboard("login");
+    }
+  }
+
   // 이름이 겹치는 회원을 구별하기 위한 4자리 무작위 회원 코드.
   // 헷갈리기 쉬운 0/O, 1/I 는 빼고 생성하고, 기존 회원과 겹치면 다시 뽑음.
   function generateMemberCode(){
@@ -667,6 +693,8 @@
     }
   }
 
+  var editingMemberId = null;
+
   function openOnboard(mode, prefillName){
     onboardMode = mode || "login";
     var titleEl = document.getElementById("onboardTitle");
@@ -681,6 +709,13 @@
       toggleOnboardNameField(true);
       nameInput.value = "";
       document.getElementById("onboardCancel").style.display = "inline-block";
+    } else if(onboardMode === "edit"){
+      titleEl.textContent = "회원 정보 수정";
+      descEl.textContent = "이름을 수정해주세요.";
+      selectField.style.display = "none";
+      toggleOnboardNameField(true);
+      nameInput.value = prefillName || "";
+      document.getElementById("onboardCancel").style.display = "inline-block";
     } else {
       titleEl.textContent = "어서오세요";
       descEl.textContent = "마라진리회 회원 명단에서 본인 이름을 선택해주세요. 다음에 다시 들어와도 자동으로 기억해둬요.";
@@ -691,6 +726,14 @@
     document.getElementById("onboard").showModal();
   }
 
+  // 회원 탭 카드의 "수정" 버튼에서 호출함 — 이름만 바꾸고 코드/가입일은 유지함.
+  function openEditMember(id){
+    var target = members.find(function(m){ return m.id === id; });
+    if(!target) return;
+    editingMemberId = id;
+    openOnboard("edit", target.name);
+  }
+
   document.getElementById("onboardForm").addEventListener("submit", function(e){
     e.preventDefault();
 
@@ -698,6 +741,24 @@
       var newName = document.getElementById("onboard-name").value.trim();
       if(!newName) return;
       upsertMember({ id: "m_"+Date.now()+"_"+Math.random().toString(36).slice(2,7), name: newName, joinedAt: Date.now(), code: generateMemberCode() });
+      document.getElementById("onboard").close();
+      return;
+    }
+
+    if(onboardMode === "edit"){
+      var editedName = document.getElementById("onboard-name").value.trim();
+      if(!editedName || !editingMemberId) return;
+      var target = members.find(function(m){ return m.id === editingMemberId; });
+      if(!target){ document.getElementById("onboard").close(); return; }
+      upsertMember({ id: target.id, name: editedName, joinedAt: target.joinedAt, code: target.code });
+      // 내가 지금 로그인한 회원 본인 정보를 고친 경우, 상단 인사말/작성자 표시도 같이 갱신함
+      if(me && me.id === target.id){
+        me = { id: me.id, name: editedName, joinedAt: me.joinedAt, code: me.code };
+        saveMe(me);
+        updateMeUI();
+        if(typeof renderAll === "function"){ renderAll(); }
+      }
+      editingMemberId = null;
       document.getElementById("onboard").close();
       return;
     }
@@ -737,6 +798,12 @@
   document.getElementById("addMemberBtn").addEventListener("click", function(){
     openOnboard("add");
   });
+  document.getElementById("membersFeed").addEventListener("click", function(e){
+    var editBtn = e.target.closest("[data-edit-member]");
+    if(editBtn){ openEditMember(editBtn.getAttribute("data-edit-member")); return; }
+    var delBtn = e.target.closest("[data-del-member]");
+    if(delBtn){ deleteMember(delBtn.getAttribute("data-del-member")); }
+  });
 
   function fmtJoined(ts){
     if(!ts) return "";
@@ -756,11 +823,14 @@
           var count = posts.filter(function(p){
             return p.authorId ? (p.authorId === m.id) : (p.author === m.name);
           }).length;
+          // 마라력: 기록 5개당 1레벨씩 오름 (0~4개 = Lv.1, 5~9개 = Lv.2, ...)
+          var level = Math.floor(count/5) + 1;
           return (
             '<article class="card member-card">'+
               '<div class="card-head"><h2>'+esc(m.name)+(m.code ? ' <span class="member-code">#'+esc(m.code)+'</span>' : '')+'</h2></div>'+
               '<div class="meta-row"><span class="date">'+fmtJoined(m.joinedAt)+' 가입</span>'+
-                '<span class="pill">기록 '+count+'개</span></div>'+
+                '<span class="pill">마라력 Lv.'+level+'</span><span class="pill">기록 '+count+'개</span></div>'+
+              '<div class="card-foot"><span></span><div class="member-actions"><button type="button" class="del" data-edit-member="'+m.id+'">수정</button><button type="button" class="del" data-del-member="'+m.id+'">탈퇴</button></div></div>'+
             '</article>'
           );
         }).join("");
@@ -1368,6 +1438,7 @@
   });
 
   document.getElementById("openComposer").addEventListener("click", function(){ resetComposer(); dlg.showModal(); });
+  document.getElementById("openComposerBoard").addEventListener("click", function(){ resetComposer(); dlg.showModal(); });
   document.getElementById("cancelComposer").addEventListener("click", function(){ dlg.close(); });
 
   document.getElementById("composerForm").addEventListener("submit", function(e){
