@@ -486,7 +486,31 @@
     });
   }
 
-  // ---------------- place search (Nominatim / OpenStreetMap) ----------------
+  // ---------------- place search ----------------
+  // OpenStreetMap(Nominatim)만으로는 작은 개인 식당이 거의 검색이 안 됨 — OSM은
+  // 국내 소상공인 POI 데이터가 매우 부실해서 역/관공서/큰 랜드마크 정도만 잡힘.
+  // 그래서 카카오 로컬 API(국내 업체 커버리지가 훨씬 좋음)를 우선 쓰고, 키가
+  // 없거나 실패하면 Nominatim으로 자동 대체함.
+  //
+  // 카카오 키 설정 방법:
+  //  1) https://developers.kakao.com 에서 애플리케이션 생성 (무료, 카드 등록 불필요)
+  //  2) "앱 키"에서 JavaScript 키 복사
+  //  3) 앱 설정 > 플랫폼 > Web 에 이 페이지가 열릴 도메인을 등록
+  //     (예: https://내아이디.github.io — 로컬에서 테스트할 땐 http://localhost:포트도 추가)
+  //  4) 아래 KAKAO_JS_KEY 에 붙여넣기
+  var KAKAO_JS_KEY = "d779acf887fb153b502e8bd629ce0b32"; // 예: "1a2b3c4d5e6f7g8h9i0j..." — 비워두면 Nominatim만 사용
+
+  var kakaoReady = false;
+  if(KAKAO_JS_KEY){
+    var kakaoScript = document.createElement("script");
+    kakaoScript.src = "https://dapi.kakao.com/v2/maps/sdk.js?appkey=" + encodeURIComponent(KAKAO_JS_KEY) + "&libraries=services&autoload=false";
+    kakaoScript.onload = function(){
+      if(window.kakao && kakao.maps){ kakao.maps.load(function(){ kakaoReady = true; }); }
+    };
+    kakaoScript.onerror = function(){ console.warn("카카오 지도 SDK를 불러오지 못했어요. Nominatim으로 대체합니다."); };
+    document.head.appendChild(kakaoScript);
+  }
+
   var placeInput = document.getElementById("placeSearchInput");
   var placeResults = document.getElementById("placeResults");
   var placePickedBox = document.getElementById("placePickedBox");
@@ -498,6 +522,7 @@
   var selectedPlace = null; // {name, address, lat, lng}
   var searchTimer = null;
   var searchAbort = null;
+  var searchSeq = 0; // 응답이 늦게 와서 최신 검색어 결과를 덮어쓰는 걸 방지
 
   function showPicked(place){
     selectedPlace = place;
@@ -526,10 +551,54 @@
     placeResults.hidden = false;
   }
 
+  function renderPlaceResults(list){
+    if(!list.length){
+      showPlaceMsg("검색 결과가 없어요. 지도에서 직접 위치를 찍어보세요.");
+      return;
+    }
+    placeResults.innerHTML = list.map(function(item, i){
+      return '<button type="button" data-i="'+i+'">'+esc(item.name)+
+        (item.address ? '<span class="sub">'+esc(item.address)+'</span>' : "")+'</button>';
+    }).join("");
+    placeResults.hidden = false;
+    Array.prototype.forEach.call(placeResults.querySelectorAll("button"), function(btn, i){
+      btn.addEventListener("click", function(){ showPicked(list[i]); });
+    });
+  }
+
   function runPlaceSearch(q){
+    var seq = ++searchSeq;
+    showPlaceMsg("검색 중…");
+    if(kakaoReady){
+      searchWithKakao(q, seq);
+    } else {
+      searchWithNominatim(q, seq);
+    }
+  }
+
+  function searchWithKakao(q, seq){
+    var places = new kakao.maps.services.Places();
+    places.keywordSearch(q, function(data, status){
+      if(seq !== searchSeq) return; // 이미 다음 검색어로 넘어감
+      if(status !== kakao.maps.services.Status.OK){
+        // 카카오 쪽 문제(권한/도메인 미등록 등)면 Nominatim으로 조용히 대체
+        searchWithNominatim(q, seq);
+        return;
+      }
+      renderPlaceResults(data.map(function(item){
+        return {
+          name: item.place_name,
+          address: item.road_address_name || item.address_name || "",
+          lat: parseFloat(item.y),
+          lng: parseFloat(item.x)
+        };
+      }));
+    });
+  }
+
+  function searchWithNominatim(q, seq){
     if(searchAbort) searchAbort.abort();
     searchAbort = new AbortController();
-    showPlaceMsg("검색 중…");
     var url = "https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=ko&q=" + encodeURIComponent(q);
     fetch(url, { signal: searchAbort.signal, headers: { "Accept": "application/json" } })
       .then(function(r){
@@ -537,29 +606,19 @@
         return r.json();
       })
       .then(function(list){
-        if(!list.length){
-          showPlaceMsg("검색 결과가 없어요. 지도에서 직접 위치를 찍어보세요.");
-          return;
-        }
-        placeResults.innerHTML = list.map(function(item, i){
-          return '<button type="button" data-i="'+i+'">'+esc(item.display_name.split(",")[0])+
-            '<span class="sub">'+esc(item.display_name)+'</span></button>';
-        }).join("");
-        placeResults.hidden = false;
-        Array.prototype.forEach.call(placeResults.querySelectorAll("button"), function(btn, i){
-          btn.addEventListener("click", function(){
-            var item = list[i];
-            showPicked({
-              name: item.display_name.split(",")[0],
-              address: item.display_name,
-              lat: parseFloat(item.lat),
-              lng: parseFloat(item.lon)
-            });
-          });
-        });
+        if(seq !== searchSeq) return;
+        renderPlaceResults(list.map(function(item){
+          return {
+            name: item.display_name.split(",")[0],
+            address: item.display_name,
+            lat: parseFloat(item.lat),
+            lng: parseFloat(item.lon)
+          };
+        }));
       })
       .catch(function(err){
-        if(err.name === "AbortError") return; // superseded by a newer keystroke — expected, not an error
+        if(err.name === "AbortError") return; // 새 검색어로 대체됨 — 정상 동작
+        if(seq !== searchSeq) return;
         console.warn("place search failed", err);
         showPlaceMsg("검색에 실패했어요 (네트워크 문제일 수 있어요). 지도에서 직접 위치를 찍어보세요.");
       });
